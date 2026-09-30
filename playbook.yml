@@ -1,0 +1,63 @@
+---
+- name: Deploy Node.js App
+  hosts: webservers
+  become: yes
+
+  vars:
+    repo_url: "https://github.com/rat9615/simple-nodejs-app.git"
+    app_directory: "/opt/node-app"
+    nodejs_version: "20"
+
+  tasks:
+
+    - name: Update apt cache and install required packages
+      ansible.builtin.apt:
+        name:
+          - git
+          - curl
+        state: present
+        update_cache: yes
+
+    - name: Configure NodeSource repository
+      ansible.builtin.shell: |
+        curl -fsSL https://deb.nodesource.com/setup_{{ nodejs_version }}.x | bash -
+      args:
+        creates: /etc/apt/sources.list.d/nodesource.list
+
+    - name: Install Node.js
+      ansible.builtin.apt:
+        name: nodejs
+        state: present
+        update_cache: yes
+
+    - name: Create application directory
+      ansible.builtin.file:
+        path: "{{ app_directory }}"
+        state: directory
+        mode: "0755"
+
+    - name: Clone Node.js application
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_directory }}"
+        version: master
+        force: yes
+
+    - name: Install application dependencies
+      ansible.builtin.npm:
+        path: "{{ app_directory }}"
+        state: present
+
+    - name: Check if Node.js application is already running
+      ansible.builtin.shell: |
+       pgrep -f "node index.js"
+      register: node_process
+      failed_when: false
+      changed_when: false
+
+    - name: Start Node.js application
+      ansible.builtin.shell: |
+        nohup npm start > app.log 2>&1 &
+      args:
+        chdir: "{{ app_directory }}"
+      when: node_process.rc != 0
